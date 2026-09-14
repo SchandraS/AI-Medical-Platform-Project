@@ -1,0 +1,55 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: manas
+      POSTGRES_PASSWORD: manas
+      POSTGRES_DB: manas
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U manas -d manas"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    ports:
+      - "5432:5432"
+
+  backend:
+    build:
+      context: ./backend
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql+psycopg://manas:manas@db:5432/manas
+      JWT_SECRET: change-me-in-production-please
+      CORS_ORIGINS: '["http://localhost:8080","http://localhost:5173"]'
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - backend-artifacts:/app/artifacts
+      - backend-data:/app/data
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 15s
+      timeout: 5s
+      start_period: 60s
+      retries: 5
+
+  frontend:
+    build:
+      context: ./frontend
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "8080:80"
+
+volumes:
+  postgres-data:
+  backend-artifacts:
+  backend-data:

@@ -1,0 +1,91 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  backend-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run pytest (fast suite; real-artifact tests auto-skip without network)
+        working-directory: backend
+        run: pytest -q --cov=app --cov-report=term-missing
+
+  frontend-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm install
+
+      - name: Typecheck + build
+        working-directory: frontend
+        run: npm run build
+
+  docker-compose-smoke-test:
+    runs-on: ubuntu-latest
+    needs: [backend-tests, frontend-build]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build and start the full stack
+        run: docker compose up --build -d
+
+      - name: Wait for backend health
+        run: |
+          for i in $(seq 1 40); do
+            if curl -fs http://localhost:8000/health; then echo "backend healthy"; exit 0; fi
+            echo "waiting for backend... ($i)"
+            sleep 5
+          done
+          echo "backend never became healthy"
+          docker compose logs backend
+          exit 1
+
+      - name: Wait for frontend
+        run: |
+          for i in $(seq 1 20); do
+            if curl -fs http://localhost:8080/ >/dev/null; then echo "frontend up"; exit 0; fi
+            sleep 3
+          done
+          echo "frontend never came up"
+          docker compose logs frontend
+          exit 1
+
+      - name: Smoke test the API through the running stack
+        run: |
+          curl -fs http://localhost:8000/health
+          curl -fs -X POST http://localhost:8000/auth/login \
+            -H "Content-Type: application/json" \
+            -d '{"username":"clinician","password":"clinician123"}' | tee /tmp/login.json
+          grep -q access_token /tmp/login.json
+
+      - name: Show logs on failure
+        if: failure()
+        run: docker compose logs
+
+      - name: Tear down
+        if: always()
+        run: docker compose down -v

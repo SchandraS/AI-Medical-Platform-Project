@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.venv/
+venv/
+*.log
+
+# Data / model artifacts (fetched at build/boot time, not committed)
+backend/artifacts/
+backend/data/
+backend/data.db
+
+# Node / frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+
+# Env
+.env
+*.env.local
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Docker
+postgres-data/
