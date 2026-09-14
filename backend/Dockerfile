@@ -21,8 +21,12 @@ USER appuser
 
 EXPOSE 8000
 
+# 127.0.0.1, not "localhost": avoids the container resolving to the ::1
+# (IPv6) /etc/hosts entry and getting a spurious connection-refused against
+# a server that's only actually bound on the IPv4 side, on images/tools
+# where that ordering bites (see the matching note in frontend/Dockerfile).
 HEALTHCHECK --interval=15s --timeout=5s --start-period=30s --retries=5 \
-    CMD curl -f http://localhost:8000/health || exit 1
+    CMD curl -f http://127.0.0.1:8000/health || exit 1
 
 ENTRYPOINT ["/app/docker-entrypoint.sh"]
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

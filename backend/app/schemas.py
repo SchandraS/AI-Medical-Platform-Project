@@ -14,11 +14,21 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from app.ml.schema import FEATURE_ORDER
 
 
-class PatientRecord(BaseModel):
+class ApiModel(BaseModel):
+    """Base for every API schema in this module. Disables Pydantic's
+    'model_' protected-namespace check: several of our fields legitimately
+    start with 'model_' (model_version_id, model_name, ...) referring to the
+    ML model registry, not to Pydantic's own model_* methods, and the
+    warning it otherwise emits on every import is just noise."""
+
+    model_config = ConfigDict(protected_namespaces=())
+
+
+class PatientRecord(ApiModel):
     """A single patient/sample record: exactly the 21 clinical indicators,
     no more, no less. extra='forbid' rejects unexpected fields outright."""
 
-    model_config = ConfigDict(extra="forbid", strict=False)
+    model_config = ConfigDict(extra="forbid", strict=False, protected_namespaces=())
 
     HighBP: int = Field(..., ge=0, le=1)
     HighChol: int = Field(..., ge=0, le=1)
@@ -64,15 +74,15 @@ class PatientRecord(BaseModel):
         return {name: getattr(self, name) for name in FEATURE_ORDER}
 
 
-class PredictRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+class PredictRequest(ApiModel):
+    model_config = ConfigDict(extra="forbid", protected_namespaces=())
     record: PatientRecord
     model_version_id: str | None = Field(
         default=None, description="Specific model version to use; defaults to the active production model."
     )
 
 
-class PredictResponse(BaseModel):
+class PredictResponse(ApiModel):
     prediction: int
     label: str
     probability: float
@@ -89,19 +99,19 @@ class PredictResponse(BaseModel):
     log_id: str
 
 
-class BatchJobAccepted(BaseModel):
+class BatchJobAccepted(ApiModel):
     job_id: str
     status: str
     total_rows: int
     message: str = "batch job accepted; poll GET /jobs/{job_id} for status"
 
 
-class RowError(BaseModel):
+class RowError(ApiModel):
     row_index: int
     errors: list[str]
 
 
-class BatchJobStatus(BaseModel):
+class BatchJobStatus(ApiModel):
     job_id: str
     filename: str
     status: str
@@ -115,7 +125,7 @@ class BatchJobStatus(BaseModel):
     finished_at: datetime | None
 
 
-class BatchRowResult(BaseModel):
+class BatchRowResult(ApiModel):
     row_index: int
     status: Literal["ok", "error"]
     prediction: int | None = None
@@ -125,26 +135,26 @@ class BatchRowResult(BaseModel):
     error: str | None = None
 
 
-class BatchJobResults(BaseModel):
+class BatchJobResults(ApiModel):
     job_id: str
     status: str
     rows: list[BatchRowResult]
 
 
-class LoginRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+class LoginRequest(ApiModel):
+    model_config = ConfigDict(extra="forbid", protected_namespaces=())
     username: str
     password: str
 
 
-class TokenResponse(BaseModel):
+class TokenResponse(ApiModel):
     access_token: str
     token_type: str = "bearer"
     role: str
     username: str
 
 
-class ModelVersionOut(BaseModel):
+class ModelVersionOut(ApiModel):
     id: str
     name: str
     version: str
@@ -157,19 +167,19 @@ class ModelVersionOut(BaseModel):
     promoted_at: datetime | None
 
 
-class EvaluateResponse(BaseModel):
+class EvaluateResponse(ApiModel):
     model_version_id: str
     metrics: dict
     evaluated_at: datetime
 
 
-class PromoteRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+class PromoteRequest(ApiModel):
+    model_config = ConfigDict(extra="forbid", protected_namespaces=())
     reason: str = Field(..., min_length=1, max_length=1000)
 
 
-class RollbackRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+class RollbackRequest(ApiModel):
+    model_config = ConfigDict(extra="forbid", protected_namespaces=())
     reason: str = Field(..., min_length=1, max_length=1000)
     target_model_version_id: str | None = Field(
         default=None,
@@ -177,7 +187,7 @@ class RollbackRequest(BaseModel):
     )
 
 
-class PromotionEventOut(BaseModel):
+class PromotionEventOut(ApiModel):
     id: str
     model_version_id: str
     from_status: str | None
@@ -188,7 +198,7 @@ class PromotionEventOut(BaseModel):
     created_at: datetime
 
 
-class InferenceLogOut(BaseModel):
+class InferenceLogOut(ApiModel):
     id: str
     user_id: str | None
     batch_job_id: str | None
@@ -203,7 +213,7 @@ class InferenceLogOut(BaseModel):
     created_at: datetime
 
 
-class ErrorResponse(BaseModel):
+class ErrorResponse(ApiModel):
     """Standard error envelope for all non-2xx responses."""
     detail: str
     error_code: str | None = None
