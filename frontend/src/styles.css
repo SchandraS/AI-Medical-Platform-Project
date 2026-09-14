@@ -105,6 +105,16 @@ label.field-invalid input, label.field-invalid select { border-color: var(--colo
 .demo-accounts { font-size: 0.8rem; color: var(--color-muted); margin-top: 12px; }
 .demo-accounts ul { padding-left: 16px; }
 
+.mode-toggle { display: flex; gap: 4px; margin: 12px 0; }
+.mode-toggle button {
+  background: var(--color-surface);
+  color: var(--color-muted);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 6px 14px;
+}
+.mode-toggle button.tab-active { background: var(--color-primary); color: white; border-color: var(--color-primary); }
+
 .predict-layout { display: grid; grid-template-columns: 2fr 1fr; gap: 24px; align-items: start; }
 @media (max-width: 900px) { .predict-layout { grid-template-columns: 1fr; } }
 

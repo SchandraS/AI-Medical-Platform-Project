@@ -122,6 +122,32 @@ Authorization: Bearer <token>
 }
 ```
 
+### 2.2b Single prediction via CSV upload
+
+The same single-record path is also reachable via a one-row CSV upload
+(`POST /predict/csv`, `multipart/form-data`), for the "single sample as CSV"
+requirement — it shares `PatientRecord` validation and the inference/logging
+path with the JSON endpoint above, so the two are provably equivalent (see
+`test_predict_csv_matches_json_predict_for_same_record`):
+
+```http
+POST /predict/csv
+Authorization: Bearer <token>
+Content-Type: multipart/form-data; boundary=...
+
+--...
+Content-Disposition: form-data; name="file"; filename="sample.csv"
+Content-Type: text/csv
+
+HighBP,HighChol,CholCheck,BMI,Smoker,Stroke,HeartDiseaseorAttack,PhysActivity,Fruits,Veggies,HvyAlcoholConsump,AnyHealthcare,NoDocbcCost,GenHlth,MentHlth,PhysHlth,DiffWalk,Sex,Age,Education,Income
+1,1,1,32.0,1,0,0,0,0,1,0,1,0,4,5,10,1,0,10,4,3
+--...--
+```
+
+Response body is identical in shape to §2.2's `PredictResponse`. A file with
+zero or more than one data row is rejected with a 422 pointing to
+`/jobs/upload` for multi-row batches instead.
+
 ### 2.3 Validation error (out-of-range value, no silent coercion)
 
 ```http
