@@ -38,19 +38,21 @@ services:
       # "dev-secret-change-me-in-production" default in config.py.
       - key: JWT_SECRET
         generateValue: true
-      # Must include the frontend's real Render URL so the browser's CORS
-      # preflight succeeds (frontend and backend are different origins here,
-      # unlike local docker-compose where nginx makes them look like one).
-      # `property: host` gives a bare hostname (e.g.
-      # "manas-frontend.onrender.com", no scheme/brackets/quotes);
-      # app/config.py's _normalize_cors_origins validator accepts that shape
-      # directly and wraps it into the https:// URL list cors_origins needs,
-      # so no extra formatting is required here.
+      # Must include the frontend's real PUBLIC Render URL so the browser's
+      # CORS preflight succeeds (frontend and backend are different origins
+      # here, unlike local docker-compose where nginx makes them look like
+      # one). This is hardcoded to the standard <service-name>.onrender.com
+      # pattern rather than templated via fromService/property:host: that
+      # property returns the service's *private-network* hostname (e.g.
+      # "manas-frontend-0ln7", a random per-deploy suffix, HTTP-only,
+      # resolvable only inside Render's network) -- never the public HTTPS
+      # URL a browser actually connects to. There is no fromService property
+      # that returns the public URL (confirmed against Render's Blueprint
+      # spec), so the deterministic onrender.com pattern is the reliable
+      # option for a free-tier service with no custom domain attached. If
+      # you rename manas-frontend or attach a custom domain, update this.
       - key: CORS_ORIGINS
-        fromService:
-          name: manas-frontend
-          type: web
-          property: host
+        value: https://manas-frontend.onrender.com
 
   # --- Frontend: React build served by nginx, proxying /api/ ----------
   - type: web
@@ -63,16 +65,23 @@ services:
       # Consumed by frontend/docker-entrypoint.sh (envsubst into
       # nginx.conf.template) so nginx proxies /api/ to the real deployed
       # backend instead of docker-compose's "backend" service-name default.
-      # Render web services only accept TLS on their public hostname (no
-      # plain-HTTP port to reach directly), so this must be https/443, not
-      # http/8000 -- nginx.conf.template's proxy_pass scheme is templated
-      # too (BACKEND_SCHEME) precisely so this isn't hardcoded as HTTP.
+      #
+      # Uses the backend's PUBLIC URL (manas-backend.onrender.com over
+      # HTTPS/443) rather than Render's private network. Two earlier
+      # versions of this file tried the private network and failed for two
+      # separate reasons, in order: (1) fromService/property:host returns
+      # the private-network hostname (e.g. "manas-backend-0ln7"), which was
+      # wrongly paired with an https/443 scheme -- that hostname isn't a
+      # TLS endpoint, giving nginx's "host not found in upstream" boot
+      # failure; (2) even fixed to plain HTTP, Render's free plan blocks
+      # free web services from *receiving* private-network requests at all
+      # (they can only send them) -- manas-backend being free means nothing,
+      # not even manas-frontend, could ever reach it that way. The public
+      # URL has no such restriction on any plan, at the cost of that traffic
+      # making a public-internet hop instead of staying inside Render.
       - key: BACKEND_SCHEME
         value: https
       - key: BACKEND_HOST
-        fromService:
-          name: manas-backend
-          type: web
-          property: host
+        value: manas-backend.onrender.com
       - key: BACKEND_PORT
         value: "443"

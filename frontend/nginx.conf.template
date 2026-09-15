@@ -10,10 +10,14 @@ server {
     # $host/$remote_addr/etc. below are left alone) -- defaults below match
     # docker-compose's plain-HTTP service name/port so a plain `docker
     # build` with no env vars set still produces a config identical to the
-    # pre-Render static file. On Render, BACKEND_SCHEME is "https" (the
-    # backend's public hostname only accepts TLS) -- proxy_ssl_server_name
-    # is required for that case so nginx sends correct SNI to a host that's
-    # multiplexing many services behind one IP, which Render's edge does.
+    # pre-Render static file. On Render, render.yaml sets BACKEND_SCHEME to
+    # "http" too: fromService/property:host+port there give the backend's
+    # *private-network* address, which is plain HTTP on Render's internal
+    # network (TLS is only terminated at Render's public edge, not between
+    # a project's own services) -- BACKEND_SCHEME stays a variable rather
+    # than hardcoded http:// so an https:// backend (e.g. one reached over
+    # the public internet instead of Render's private network) still works;
+    # proxy_ssl_server_name only takes effect when the scheme is https.
     # Large batch CSV uploads need a bumped body size.
     location /api/ {
         proxy_pass ${BACKEND_SCHEME}://${BACKEND_HOST}:${BACKEND_PORT}/;
