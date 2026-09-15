@@ -10,48 +10,28 @@ server {
     # $host/$remote_addr/etc. below are left alone) -- defaults below match
     # docker-compose's plain-HTTP service name/port so a plain `docker
     # build` with no env vars set still produces a config identical to the
-    # pre-Render static file. On Render, render.yaml sets BACKEND_SCHEME to
-    # "http" too: fromService/property:host+port there give the backend's
-    # *private-network* address, which is plain HTTP on Render's internal
-    # network (TLS is only terminated at Render's public edge, not between
-    # a project's own services) -- BACKEND_SCHEME stays a variable rather
-    # than hardcoded http:// so an https:// backend (e.g. one reached over
-    # the public internet instead of Render's private network) still works;
-    # proxy_ssl_server_name only takes effect when the scheme is https.
+    # pre-Render static file. On Render, BACKEND_SCHEME is "https" (the
+    # backend's public URL) -- see render.yaml for why it's the public URL
+    # rather than Render's private network.
     # Large batch CSV uploads need a bumped body size.
-    # Temporary unambiguous diagnostic route: returns a fixed, unmistakable
-    # plain-text body directly from nginx itself, no proxy_pass involved at
-    # all. If this doesn't return exactly "NGINX_API_LOCATION_REACHED",
-    # location /api/ (in any form) is not being reached for this path,
-    # full stop -- rules out every proxy_pass/backend-connectivity
-    # hypothesis at once.
-    location = /api/__routing_probe__ {
-        add_header X-Matched-Location "api-proxy-probe" always;
-        default_type text/plain;
-        return 200 "NGINX_API_LOCATION_REACHED";
-    }
-
-    # Second diagnostic probe: proxies to a known-good, always-reachable
-    # external HTTPS site (not our backend) to isolate whether proxy_pass
-    # itself works at all from inside Render's container network, separate
-    # from any question about reaching manas-backend specifically.
-    location = /api/__proxy_probe__ {
-        add_header X-Matched-Location "proxy-probe" always;
-        proxy_pass https://example.com/;
-        proxy_ssl_server_name on;
-        proxy_set_header Host example.com;
-    }
-
     location /api/ {
-        # Temporary marker header while diagnosing a live routing
-        # discrepancy: proves definitively (via a response header alone,
-        # no shell access needed) whether a given request was served by
-        # THIS location block or fell through to location / below.
-        add_header X-Matched-Location "api-proxy" always;
         proxy_pass ${BACKEND_SCHEME}://${BACKEND_HOST}:${BACKEND_PORT}/;
         proxy_ssl_server_name on;
         proxy_http_version 1.1;
-        proxy_set_header Host $host;
+        # Host must be the BACKEND's own hostname, not the original
+        # client's ($host here would be the frontend's own public
+        # hostname). Render/Cloudflare's edge routes many services from
+        # shared IPs using Host-header/SNI-based routing at the origin --
+        # forwarding the *client's* Host instead of the backend's silently
+        # misroutes the proxied request to whichever service that Host
+        # actually belongs to (in production, this routed the request
+        # right back to this same frontend container, which is why /api/*
+        # appeared to silently fall through to the SPA's own static-file
+        # handling -- confirmed by reproducing the exact symptom locally
+        # only once an external Host header matching the real deployed
+        # frontend hostname was sent, and confirmed fixed by explicitly
+        # setting Host to the backend's own hostname here).
+        proxy_set_header Host ${BACKEND_HOST};
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         client_max_body_size 20m;
@@ -61,7 +41,6 @@ server {
     # Single-page app: any non-file route falls back to index.html so
     # client-side routing (react-router) works on a hard refresh.
     location / {
-        add_header X-Matched-Location "spa-fallback" always;
         try_files $uri $uri/ /index.html;
     }
 }

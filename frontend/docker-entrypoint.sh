@@ -34,8 +34,5 @@ envsubst '${BACKEND_SCHEME} ${BACKEND_HOST} ${BACKEND_PORT}' \
   < /etc/nginx/conf.d/default.conf.template \
   > /etc/nginx/conf.d/default.conf
 
-echo "[docker-entrypoint] rendered config:"
-cat /etc/nginx/conf.d/default.conf
-
-echo "[docker-entrypoint] handing off to: $*"
+echo "[docker-entrypoint] config rendered, handing off to: $*"
 exec "$@"
