@@ -15,7 +15,13 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
-RUN mkdir -p /app/artifacts /app/data && chown -R appuser:appuser /app
+# chmod explicitly rather than relying on the executable bit surviving every
+# checkout/clone: NTFS (Windows) doesn't track the Unix +x bit, so a commit
+# made from a Windows checkout can silently lose it even with correct LF
+# line endings, leaving the container failing at startup with
+# "permission denied" on the entrypoint.
+RUN chmod +x /app/docker-entrypoint.sh \
+    && mkdir -p /app/artifacts /app/data && chown -R appuser:appuser /app
 
 USER appuser
 
