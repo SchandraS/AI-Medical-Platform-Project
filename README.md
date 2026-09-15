@@ -48,8 +48,9 @@ endpoints return a clean `503` until the artifacts are fetched (see
 ```
 repo-root/
 ├── backend/            FastAPI service, Alembic migrations, pytest suite, Dockerfile
-├── frontend/            React/Vite app, Dockerfile, nginx.conf
+├── frontend/            React/Vite app, Dockerfile, nginx.conf.template
 ├── docker-compose.yml   One command to bring up db + backend + frontend
+├── render.yaml           Render Blueprint for a free public deployment
 ├── README.md            (this file)
 ├── REPORT.md             Design write-up, example requests, test results
 └── DESIGN.md             Answer to the retraining/promotion design question
@@ -128,6 +129,46 @@ never drift from the ML feature contract extracted from the real scaler.
 Interactive OpenAPI/Swagger docs are served at `/docs` (and `/redoc`) once the backend is
 running — e.g. http://localhost:8000/docs. See REPORT.md for example request/response
 bodies for the main endpoints.
+
+## Deploying to Render (free tier)
+
+`render.yaml` at the repo root is a [Render Blueprint](https://render.com/docs/blueprint-spec)
+that deploys the same three services as `docker-compose.yml` — Postgres, backend, frontend —
+as independent public services instead of one Docker Compose network.
+
+**Steps:**
+1. Push this repo to GitHub (already done if you're reading this from there).
+2. On [render.com](https://render.com), **New → Blueprint**, connect the repo. Render reads
+   `render.yaml` and provisions `manas-db` (Postgres), `manas-backend`, and `manas-frontend`.
+3. Wait for all three to finish deploying (the backend build is the slowest — it installs
+   TensorFlow, ~2–4 min on Render's free build machines).
+4. Open the `manas-frontend` service's URL. Log in with the same seeded demo accounts as
+   local Docker Compose (see above) — the backend seeds them on every boot, same as locally.
+
+**What's different from local Docker Compose, and why:**
+- **`frontend/nginx.conf.template` + `frontend/docker-entrypoint.sh`**: locally, nginx
+  proxies `/api/` to `http://backend:8000/` — a hostname only resolvable inside Docker
+  Compose's private network. On Render the frontend and backend are separately-addressed
+  services, so the proxy target is templated: `docker-entrypoint.sh` runs `envsubst` on
+  `nginx.conf.template` at container start, filling in `BACKEND_HOST`/`BACKEND_PORT` from
+  environment variables `render.yaml` wires to the backend service's real Render hostname.
+  With no env vars set (e.g. a plain `docker build` outside Compose), it falls back to
+  `backend:8000`, so this is a no-op change for local Docker Compose behavior.
+- **`app/config.py`'s `database_url` and `cors_origins`** gained small normalizing
+  validators: Render hands out a bare `postgresql://` connection string (SQLAlchemy would
+  otherwise default to the unin­stalled `psycopg2` driver instead of the pinned `psycopg` 3
+  driver), and a bare hostname for `CORS_ORIGINS` (Render's Blueprint cross-service
+  references return a hostname, not a full URL or JSON array). Both are covered by
+  `backend/tests/test_config.py`.
+- **Postgres free tier expires after 90 days** unless upgraded to a paid plan — fine for a
+  demo/portfolio deployment; recreate the database (or upgrade it) when Render emails you
+  before expiry. An always-free alternative (e.g. Supabase Postgres) can be substituted by
+  pointing the backend's `DATABASE_URL` env var at it instead of `fromDatabase: manas-db`.
+- **Free web services sleep after 15 minutes idle** and cold-start slowly on the next
+  request (the backend's boot sequence re-downloads model artifacts/eval data, runs
+  migrations, and reseeds on every start — see Quickstart above), so the first request
+  after a period of inactivity can take 30–60+ seconds. This is a demo-tier tradeoff, not a
+  production one.
 
 ## Known deviations from a "preferred stack, no substitutions" reading
 

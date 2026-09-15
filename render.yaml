@@ -1,0 +1,78 @@
+# Render Blueprint: deploys the same three services docker-compose.yml runs
+# locally (Postgres, backend API, frontend), wired together with Render's
+# own service discovery instead of Docker Compose's private network.
+#
+# Deploy: push this file to the repo, then on render.com choose
+# New -> Blueprint and point it at this repo. Render reads this file and
+# provisions everything below in one step. See README.md's "Deploying to
+# Render" section for the full walkthrough and what differs from local
+# Docker Compose and why -- the comments below cover the per-service detail.
+
+databases:
+  # Render's managed Postgres. Free for 90 days, after which it must be
+  # upgraded to a paid plan or recreated -- acceptable for a demo/portfolio
+  # deployment; noted in README.md's deploy section.
+  - name: manas-db
+    plan: free
+    databaseName: manas
+    user: manas
+
+services:
+  # --- Backend: FastAPI + the ML inference pipeline -------------------
+  - type: web
+    name: manas-backend
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      # Render hands out a bare postgresql:// URL; app/config.py's
+      # _ensure_psycopg_driver validator rewrites it to postgresql+psycopg://
+      # (the driver actually pinned in requirements.txt) automatically.
+      - key: DATABASE_URL
+        fromDatabase:
+          name: manas-db
+          property: connectionString
+      # Render-generated random secret -- never the insecure
+      # "dev-secret-change-me-in-production" default in config.py.
+      - key: JWT_SECRET
+        generateValue: true
+      # Must include the frontend's real Render URL so the browser's CORS
+      # preflight succeeds (frontend and backend are different origins here,
+      # unlike local docker-compose where nginx makes them look like one).
+      # `property: host` gives a bare hostname (e.g.
+      # "manas-frontend.onrender.com", no scheme/brackets/quotes);
+      # app/config.py's _normalize_cors_origins validator accepts that shape
+      # directly and wraps it into the https:// URL list cors_origins needs,
+      # so no extra formatting is required here.
+      - key: CORS_ORIGINS
+        fromService:
+          name: manas-frontend
+          type: web
+          property: host
+
+  # --- Frontend: React build served by nginx, proxying /api/ ----------
+  - type: web
+    name: manas-frontend
+    runtime: docker
+    dockerfilePath: ./frontend/Dockerfile
+    dockerContext: ./frontend
+    plan: free
+    envVars:
+      # Consumed by frontend/docker-entrypoint.sh (envsubst into
+      # nginx.conf.template) so nginx proxies /api/ to the real deployed
+      # backend instead of docker-compose's "backend" service-name default.
+      # Render web services only accept TLS on their public hostname (no
+      # plain-HTTP port to reach directly), so this must be https/443, not
+      # http/8000 -- nginx.conf.template's proxy_pass scheme is templated
+      # too (BACKEND_SCHEME) precisely so this isn't hardcoded as HTTP.
+      - key: BACKEND_SCHEME
+        value: https
+      - key: BACKEND_HOST
+        fromService:
+          name: manas-backend
+          type: web
+          property: host
+      - key: BACKEND_PORT
+        value: "443"
