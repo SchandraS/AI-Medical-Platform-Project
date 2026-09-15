@@ -19,6 +19,18 @@ server {
     # the public internet instead of Render's private network) still works;
     # proxy_ssl_server_name only takes effect when the scheme is https.
     # Large batch CSV uploads need a bumped body size.
+    # Temporary unambiguous diagnostic route: returns a fixed, unmistakable
+    # plain-text body directly from nginx itself, no proxy_pass involved at
+    # all. If this doesn't return exactly "NGINX_API_LOCATION_REACHED",
+    # location /api/ (in any form) is not being reached for this path,
+    # full stop -- rules out every proxy_pass/backend-connectivity
+    # hypothesis at once.
+    location = /api/__routing_probe__ {
+        add_header X-Matched-Location "api-proxy-probe" always;
+        default_type text/plain;
+        return 200 "NGINX_API_LOCATION_REACHED";
+    }
+
     location /api/ {
         # Temporary marker header while diagnosing a live routing
         # discrepancy: proves definitively (via a response header alone,
