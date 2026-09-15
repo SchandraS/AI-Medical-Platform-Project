@@ -41,18 +41,27 @@ services:
       # Must include the frontend's real PUBLIC Render URL so the browser's
       # CORS preflight succeeds (frontend and backend are different origins
       # here, unlike local docker-compose where nginx makes them look like
-      # one). This is hardcoded to the standard <service-name>.onrender.com
-      # pattern rather than templated via fromService/property:host: that
-      # property returns the service's *private-network* hostname (e.g.
-      # "manas-frontend-0ln7", a random per-deploy suffix, HTTP-only,
-      # resolvable only inside Render's network) -- never the public HTTPS
-      # URL a browser actually connects to. There is no fromService property
-      # that returns the public URL (confirmed against Render's Blueprint
-      # spec), so the deterministic onrender.com pattern is the reliable
-      # option for a free-tier service with no custom domain attached. If
-      # you rename manas-frontend or attach a custom domain, update this.
+      # one).
+      #
+      # RENDER_EXTERNAL_URL is a variable Render auto-injects into every web
+      # service's own environment -- the service's real public URL, e.g.
+      # "https://manas-frontend-0ln7.onrender.com" (Render appends a random
+      # per-service suffix to the onrender.com subdomain; it is NOT simply
+      # <service-name>.onrender.com, a wrong assumption two earlier versions
+      # of this file made and which caused two separate live deploy
+      # failures -- confirmed by curling the actual dashboard-listed URL vs.
+      # the guessed one). fromService/envVarKey reads that variable from
+      # manas-frontend's own environment into this one, so the value is
+      # always the real deployed URL regardless of what suffix Render
+      # assigns, with no manual updating required if the service is ever
+      # recreated. (fromService/property:host, used in earlier attempts, is
+      # a different, unrelated thing: the service's *private-network*
+      # hostname, not any form of its public address.)
       - key: CORS_ORIGINS
-        value: https://manas-frontend.onrender.com
+        fromService:
+          name: manas-frontend
+          type: web
+          envVarKey: RENDER_EXTERNAL_URL
 
   # --- Frontend: React build served by nginx, proxying /api/ ----------
   - type: web
@@ -66,22 +75,38 @@ services:
       # nginx.conf.template) so nginx proxies /api/ to the real deployed
       # backend instead of docker-compose's "backend" service-name default.
       #
-      # Uses the backend's PUBLIC URL (manas-backend.onrender.com over
-      # HTTPS/443) rather than Render's private network. Two earlier
-      # versions of this file tried the private network and failed for two
-      # separate reasons, in order: (1) fromService/property:host returns
-      # the private-network hostname (e.g. "manas-backend-0ln7"), which was
-      # wrongly paired with an https/443 scheme -- that hostname isn't a
-      # TLS endpoint, giving nginx's "host not found in upstream" boot
-      # failure; (2) even fixed to plain HTTP, Render's free plan blocks
-      # free web services from *receiving* private-network requests at all
-      # (they can only send them) -- manas-backend being free means nothing,
-      # not even manas-frontend, could ever reach it that way. The public
-      # URL has no such restriction on any plan, at the cost of that traffic
-      # making a public-internet hop instead of staying inside Render.
+      # Uses the backend's PUBLIC URL over HTTPS/443 rather than Render's
+      # private network. Earlier versions of this file tried the private
+      # network and failed for two separate reasons, in order: (1)
+      # fromService/property:host returns the private-network hostname
+      # (e.g. "manas-backend-0ln7"), which was wrongly paired with an
+      # https/443 scheme -- that hostname isn't a TLS endpoint, giving
+      # nginx's "host not found in upstream" boot failure; (2) even fixed
+      # to plain HTTP, Render's free plan blocks free web services from
+      # *receiving* private-network requests at all (they can only send
+      # them) -- manas-backend being free means nothing, not even
+      # manas-frontend, could ever reach it that way. The public URL has no
+      # such restriction on any plan, at the cost of that traffic making a
+      # public-internet hop instead of staying inside Render.
+      #
+      # A THIRD version of this file then hardcoded BACKEND_HOST to
+      # "manas-backend.onrender.com", assuming Render's public subdomain is
+      # exactly <service-name>.onrender.com. That's wrong: Render appends a
+      # random per-service suffix (the real deployed URL was
+      # "manas-backend-0ln7.onrender.com", confirmed from the dashboard),
+      # so every request the frontend sent silently hit a nonexistent host
+      # and fell through nginx's config in a way that looked like a routing
+      # bug rather than a wrong hostname. Fixed for good by reading
+      # RENDER_EXTERNAL_HOSTNAME -- a variable Render auto-injects into
+      # manas-backend's own environment with its real public hostname, no
+      # suffix-guessing required -- via fromService/envVarKey, the same way
+      # CORS_ORIGINS above reads manas-frontend's RENDER_EXTERNAL_URL.
       - key: BACKEND_SCHEME
         value: https
       - key: BACKEND_HOST
-        value: manas-backend.onrender.com
+        fromService:
+          name: manas-backend
+          type: web
+          envVarKey: RENDER_EXTERNAL_HOSTNAME
       - key: BACKEND_PORT
         value: "443"
