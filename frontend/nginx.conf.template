@@ -31,6 +31,17 @@ server {
         return 200 "NGINX_API_LOCATION_REACHED";
     }
 
+    # Second diagnostic probe: proxies to a known-good, always-reachable
+    # external HTTPS site (not our backend) to isolate whether proxy_pass
+    # itself works at all from inside Render's container network, separate
+    # from any question about reaching manas-backend specifically.
+    location = /api/__proxy_probe__ {
+        add_header X-Matched-Location "proxy-probe" always;
+        proxy_pass https://example.com/;
+        proxy_ssl_server_name on;
+        proxy_set_header Host example.com;
+    }
+
     location /api/ {
         # Temporary marker header while diagnosing a live routing
         # discrepancy: proves definitively (via a response header alone,
