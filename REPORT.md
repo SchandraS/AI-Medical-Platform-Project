@@ -333,3 +333,10 @@ processing for the rest of the file.
   passlib's bcrypt backend does a version probe (`bcrypt.__about__`) that no longer exists
   in modern `bcrypt` releases, a known upstream incompatibility that surfaced immediately
   in testing — calling `bcrypt.hashpw`/`checkpw` directly avoids it entirely.
+- **ONNX Runtime was identified but scoped out.** Converting both models to ONNX would
+  drop the backend image's TensorFlow dependency (~600MB+) and likely cut inference
+  latency, since `onnxruntime` is a much lighter, CPU-optimized runtime than full
+  TensorFlow for a 2,945-parameter MLP. Deferred for this submission to keep the served
+  artifacts numerically identical to the published `.keras`/`.joblib` files with zero
+  conversion risk; worth revisiting if image size or cold-start latency become real
+  constraints in production.

@@ -9,6 +9,13 @@ gate, audited logging, RBAC, and basic monitoring.
 (frontend), Docker Compose. See [REPORT.md](REPORT.md) for the full design writeup and
 [DESIGN.md](DESIGN.md) for the model-update/retraining design question.
 
+## Live deployment
+
+A hosted instance is running at **[manas-frontend-xed2.onrender.com](https://manas-frontend-xed2.onrender.com)**
+— log in with any of the seeded demo accounts below. It's on Render's free tier, so the
+backend spins down after periods of inactivity; the first request after a while can take
+30–60+ seconds to wake it back up.
+
 ## Quickstart
 
 ```bash
