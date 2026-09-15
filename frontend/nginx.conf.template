@@ -20,6 +20,11 @@ server {
     # proxy_ssl_server_name only takes effect when the scheme is https.
     # Large batch CSV uploads need a bumped body size.
     location /api/ {
+        # Temporary marker header while diagnosing a live routing
+        # discrepancy: proves definitively (via a response header alone,
+        # no shell access needed) whether a given request was served by
+        # THIS location block or fell through to location / below.
+        add_header X-Matched-Location "api-proxy" always;
         proxy_pass ${BACKEND_SCHEME}://${BACKEND_HOST}:${BACKEND_PORT}/;
         proxy_ssl_server_name on;
         proxy_http_version 1.1;
@@ -33,6 +38,7 @@ server {
     # Single-page app: any non-file route falls back to index.html so
     # client-side routing (react-router) works on a hard refresh.
     location / {
+        add_header X-Matched-Location "spa-fallback" always;
         try_files $uri $uri/ /index.html;
     }
 }
